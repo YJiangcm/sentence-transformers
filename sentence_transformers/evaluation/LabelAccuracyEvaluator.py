@@ -32,6 +32,9 @@ class LabelAccuracyEvaluator(SentenceEvaluator):
 
         self.csv_file = "accuracy_evaluation"+name+"_results.csv"
         self.csv_headers = ["epoch", "steps", "accuracy"]
+        
+        self.csv_file_result = "prediction_evaluation"+name+"_results.csv"
+        self.csv_headers_result = ["prediction"]
 
     def __call__(self, model, output_path: str = None, epoch: int = -1, steps: int = -1) -> float:
         model.eval()
@@ -48,6 +51,8 @@ class LabelAccuracyEvaluator(SentenceEvaluator):
 
         logging.info("Evaluation on the "+self.name+" dataset"+out_txt)
         self.dataloader.collate_fn = model.smart_batching_collate
+        
+        predicts=[]
         for step, batch in enumerate(tqdm(self.dataloader, desc="Evaluating")):
             features, label_ids = batch_to_device(batch, model.device)
             with torch.no_grad():
@@ -55,6 +60,7 @@ class LabelAccuracyEvaluator(SentenceEvaluator):
 
             total += prediction.size(0)
             correct += torch.argmax(prediction, dim=1).eq(label_ids).sum().item()
+            predicts.append(torch.argmax(prediction, dim=1).numpy().tolist())
         accuracy = correct/total
 
         logging.info("Accuracy: {:.4f} ({}/{})\n".format(accuracy, correct, total))
@@ -71,4 +77,19 @@ class LabelAccuracyEvaluator(SentenceEvaluator):
                     writer = csv.writer(f)
                     writer.writerow([epoch, steps, accuracy])
 
+            csv_path1 = os.path.join(output_path, self.csv_file_result)
+            
+            if not os.path.isfile(csv_path1):
+                with open(csv_path1, mode="w", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(self.csv_headers_result)
+                    for row in predicts:
+                        writer.writerow([row])
+            else:
+                with open(csv_path1, mode="a", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(self.csv_headers_result)
+                    for row in predicts:
+                        writer.writerow([row])
+                        
         return accuracy
